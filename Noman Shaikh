@@ -1,0 +1,498 @@
+Bilkul! Ye single-file, ready-to-run Flappy Bird–type game hai. Isse index.html naam se save karke browser mein open karo. 🐦🎮
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Flappy Sky</title>
+
+<style>
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body {
+  overflow: hidden;
+  background: #87ceeb;
+  font-family: Arial, sans-serif;
+}
+
+canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  touch-action: none;
+}
+
+#ui {
+  position: fixed;
+  top: 20px;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  color: white;
+  font-size: 42px;
+  font-weight: bold;
+  text-shadow: 2px 3px 4px #333;
+  pointer-events: none;
+}
+
+#message {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.box {
+  background: rgba(0,0,0,.65);
+  color: white;
+  padding: 25px 35px;
+  border-radius: 20px;
+  text-align: center;
+  font-size: 24px;
+}
+
+button {
+  margin-top: 15px;
+  padding: 12px 25px;
+  border: none;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="ui">0</div>
+
+<div id="message">
+  <div class="box">
+    <div id="title">🐦 FLAPPY SKY</div>
+    <div id="instruction">Tap / Click to Fly</div>
+    <button id="startBtn">START GAME</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const ui = document.getElementById("ui");
+const message = document.getElementById("message");
+const title = document.getElementById("title");
+const instruction = document.getElementById("instruction");
+const startBtn = document.getElementById("startBtn");
+
+let W, H;
+let gameRunning = false;
+let gameOver = false;
+let score = 0;
+let pipes = [];
+let lastTime = 0;
+let pipeTimer = 0;
+
+const bird = {
+  x: 0,
+  y: 0,
+  radius: 18,
+  velocity: 0,
+  gravity: 1450,
+  jump: -430,
+  rotation: 0
+};
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  W = window.innerWidth;
+  H = window.innerHeight;
+
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + "px";
+  canvas.style.height = H + "px";
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  bird.x = W * 0.25;
+
+  if (!gameRunning) {
+    bird.y = H * 0.45;
+  }
+}
+
+window.addEventListener("resize", resize);
+resize();
+
+function resetGame() {
+  score = 0;
+  pipes = [];
+  pipeTimer = 0;
+
+  bird.x = W * 0.25;
+  bird.y = H * 0.45;
+  bird.velocity = 0;
+  bird.rotation = 0;
+
+  ui.textContent = "0";
+
+  gameOver = false;
+  gameRunning = true;
+
+  message.style.display = "none";
+
+  flap();
+}
+
+function flap() {
+  if (!gameRunning) return;
+
+  bird.velocity = bird.jump;
+}
+
+function endGame() {
+  gameRunning = false;
+  gameOver = true;
+
+  title.textContent = "💥 GAME OVER";
+  instruction.innerHTML = "Score: <b>" + score + "</b>";
+
+  startBtn.textContent = "PLAY AGAIN";
+  message.style.display = "flex";
+}
+
+function createPipe() {
+  const pipeWidth = Math.max(60, W * 0.14);
+
+  const gap = Math.max(145, H * 0.24);
+
+  const minTop = 70;
+  const maxTop = H - gap - 120;
+
+  const topHeight =
+    minTop + Math.random() * Math.max(20, maxTop - minTop);
+
+  pipes.push({
+    x: W + pipeWidth,
+    width: pipeWidth,
+    top: topHeight,
+    gap: gap,
+    passed: false
+  });
+}
+
+function update(dt) {
+  if (!gameRunning) return;
+
+  bird.velocity += bird.gravity * dt;
+  bird.y += bird.velocity * dt;
+
+  bird.rotation = Math.max(
+    -0.5,
+    Math.min(1.2, bird.velocity / 600)
+  );
+
+  pipeTimer += dt;
+
+  const pipeInterval = Math.max(1.15, 1.65 - score * 0.015);
+
+  if (pipeTimer >= pipeInterval) {
+    pipeTimer = 0;
+    createPipe();
+  }
+
+  const speed = Math.min(430, 250 + score * 4);
+
+  for (let i = pipes.length - 1; i >= 0; i--) {
+    const p = pipes[i];
+
+    p.x -= speed * dt;
+
+    if (!p.passed && p.x + p.width < bird.x) {
+      p.passed = true;
+      score++;
+      ui.textContent = score;
+    }
+
+    if (p.x + p.width < -20) {
+      pipes.splice(i, 1);
+    }
+  }
+
+  checkCollision();
+}
+
+function checkCollision() {
+  const ground = H - 55;
+
+  if (bird.y - bird.radius < 0 ||
+      bird.y + bird.radius > ground) {
+    endGame();
+    return;
+  }
+
+  for (const p of pipes) {
+    const inX =
+      bird.x + bird.radius > p.x &&
+      bird.x - bird.radius < p.x + p.width;
+
+    const hitTop =
+      bird.y - bird.radius < p.top;
+
+    const bottomY = p.top + p.gap;
+
+    const hitBottom =
+      bird.y + bird.radius > bottomY;
+
+    if (inX && (hitTop || hitBottom)) {
+      endGame();
+      return;
+    }
+  }
+}
+
+function drawBackground() {
+  const gradient = ctx.createLinearGradient(0, 0, 0, H);
+  gradient.addColorStop(0, "#55c7f2");
+  gradient.addColorStop(1, "#d9f7ff");
+
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, W, H);
+
+  // Clouds
+  ctx.fillStyle = "rgba(255,255,255,.8)";
+
+  drawCloud(W * 0.15, H * 0.18, 1);
+  drawCloud(W * 0.7, H * 0.28, 0.8);
+  drawCloud(W * 0.45, H * 0.10, 0.55);
+}
+
+function drawCloud(x, y, scale) {
+  ctx.beginPath();
+
+  ctx.arc(x, y, 25 * scale, 0, Math.PI * 2);
+  ctx.arc(x + 30 * scale, y - 10 * scale, 35 * scale, 0, Math.PI * 2);
+  ctx.arc(x + 65 * scale, y, 25 * scale, 0, Math.PI * 2);
+
+  ctx.fill();
+}
+
+function drawPipes() {
+  for (const p of pipes) {
+    const bottomY = p.top + p.gap;
+
+    // Pipe body
+    ctx.fillStyle = "#31b84a";
+
+    ctx.fillRect(
+      p.x,
+      0,
+      p.width,
+      p.top
+    );
+
+    ctx.fillRect(
+      p.x,
+      bottomY,
+      p.width,
+      H - bottomY - 55
+    );
+
+    // Pipe caps
+    ctx.fillStyle = "#23913a";
+
+    const capHeight = 25;
+
+    ctx.fillRect(
+      p.x - 6,
+      p.top - capHeight,
+      p.width + 12,
+      capHeight
+    );
+
+    ctx.fillRect(
+      p.x - 6,
+      bottomY,
+      p.width + 12,
+      capHeight
+    );
+
+    // Highlight
+    ctx.fillStyle = "rgba(255,255,255,.2)";
+
+    ctx.fillRect(
+      p.x + p.width * 0.18,
+      0,
+      p.width * 0.15,
+      p.top
+    );
+
+    ctx.fillRect(
+      p.x + p.width * 0.18,
+      bottomY,
+      p.width * 0.15,
+      H - bottomY - 55
+    );
+  }
+}
+
+function drawGround() {
+  const groundY = H - 55;
+
+  ctx.fillStyle = "#76c442";
+  ctx.fillRect(0, groundY, W, 10);
+
+  ctx.fillStyle = "#d8b24c";
+  ctx.fillRect(0, groundY + 10, W, 45);
+
+  ctx.fillStyle = "#b99638";
+
+  for (let x = 0; x < W; x += 30) {
+    ctx.fillRect(x, groundY + 20, 15, 5);
+  }
+}
+
+function drawBird() {
+  ctx.save();
+
+  ctx.translate(bird.x, bird.y);
+  ctx.rotate(bird.rotation);
+
+  // Body
+  ctx.fillStyle = "#ffd92f";
+  ctx.beginPath();
+  ctx.arc(0, 0, bird.radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Wing
+  ctx.fillStyle = "#f2b900";
+
+  ctx.beginPath();
+  ctx.ellipse(
+    -7,
+    7,
+    12,
+    7,
+    -0.3,
+    0,
+    Math.PI * 2
+  );
+
+  ctx.fill();
+
+  // Eye
+  ctx.fillStyle = "white";
+  ctx.beginPath();
+  ctx.arc(7, -7, 7, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "black";
+  ctx.beginPath();
+  ctx.arc(9, -7, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Beak
+  ctx.fillStyle = "#ff8c00";
+
+  ctx.beginPath();
+  ctx.moveTo(16, -1);
+  ctx.lineTo(31, 4);
+  ctx.lineTo(16, 8);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  drawBackground();
+  drawPipes();
+  drawGround();
+  drawBird();
+}
+
+function loop(time) {
+  const dt = Math.min((time - lastTime) / 1000, 0.03);
+  lastTime = time;
+
+  update(dt);
+  draw();
+
+  requestAnimationFrame(loop);
+}
+
+function handleInput(e) {
+  e.preventDefault();
+
+  if (!gameRunning && !gameOver) {
+    resetGame();
+    return;
+  }
+
+  if (gameOver) return;
+
+  flap();
+}
+
+canvas.addEventListener("pointerdown", handleInput);
+
+startBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  resetGame();
+});
+
+document.addEventListener("keydown", (e) => {
+  if (
+    e.code === "Space" ||
+    e.code === "ArrowUp"
+  ) {
+    e.preventDefault();
+
+    if (!gameRunning) {
+      resetGame();
+    } else {
+      flap();
+    }
+  }
+});
+
+requestAnimationFrame(loop);
+</script>
+
+</body>
+</html>
+
+📱 Phone par chalane ka easiest way
+
+1. Code ko copy karo.
+
+
+2. Kisi HTML editor/code editor mein paste karo.
+
+
+3. File ka naam index.html rakho.
+
+
+4. Run/Preview dabao.
+
+
+5. Screen tap karke bird ko fly karao. 🐦
+
+
+
+Ye original Flappy Bird ka clone-style gameplay hai, lekin naam/artwork alag rakha hai.
